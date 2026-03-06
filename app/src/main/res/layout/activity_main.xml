@@ -160,7 +160,6 @@
                 android:textSize="15sp"
                 android:textColor="#1A1A2E"
                 android:hint="Enter username"
-                android:hintTextColor="#AAAACC"
                 android:inputType="text"
                 android:singleLine="true"
                 android:layout_marginBottom="20dp" />
@@ -223,7 +222,6 @@
                     android:textSize="14sp"
                     android:textColor="#1A1A2E"
                     android:hint="60"
-                    android:hintTextColor="#AAAACC"
                     android:inputType="numberSigned"
                     android:singleLine="true"
                     android:gravity="center" />
