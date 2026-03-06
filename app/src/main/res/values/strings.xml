@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Tracker</string>
+    <string name="tracking_active">Tracking Active</string>
+    <string name="tracking_stopped">Tracking Stopped</string>
+</resources>

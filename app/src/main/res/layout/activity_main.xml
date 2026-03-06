@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F0F2F5"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp">
+
+            <ImageView
+                android:id="@+id/iv_status_icon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/ic_menu_mylocation"
+                android:layout_marginEnd="12dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="GPS Tracker"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="#1A1A2E" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ctrlall.com location reporter"
+                    android:textSize="12sp"
+                    android:textColor="#666680" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Status Card -->
+        <LinearLayout
+            android:id="@+id/layout_status_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/card_inactive">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:id="@+id/tv_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="○ TRACKING STOPPED"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#9E9E9E" />
+
+                <Switch
+                    android:id="@+id/switch_tracking"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LAST LOCATION"
+                android:textSize="10sp"
+                android:textColor="#888888"
+                android:textAllCaps="true"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="2dp" />
+
+            <TextView
+                android:id="@+id/tv_last_location"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Waiting for GPS..."
+                android:textSize="13sp"
+                android:textColor="#333355"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="10dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LAST SENT"
+                android:textSize="10sp"
+                android:textColor="#888888"
+                android:textAllCaps="true"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="2dp" />
+
+            <TextView
+                android:id="@+id/tv_last_sent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Not sent yet"
+                android:textSize="13sp"
+                android:textColor="#333355"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Settings Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/card_white">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙  Settings"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A2E"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Username -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Username"
+                android:textSize="13sp"
+                android:textColor="#555577"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/et_username"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/input_bg"
+                android:padding="12dp"
+                android:textSize="15sp"
+                android:textColor="#1A1A2E"
+                android:hint="Enter username"
+                android:hintTextColor="#AAAACC"
+                android:inputType="text"
+                android:singleLine="true"
+                android:layout_marginBottom="20dp" />
+
+            <!-- Interval -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Reporting Interval"
+                    android:textSize="13sp"
+                    android:textColor="#555577" />
+
+                <TextView
+                    android:id="@+id/tv_interval_display"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="60 seconds"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#4A90E2" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/seekbar_interval"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="20"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Or type seconds:"
+                    android:textSize="12sp"
+                    android:textColor="#888899" />
+
+                <EditText
+                    android:id="@+id/et_interval"
+                    android:layout_width="90dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/input_bg"
+                    android:padding="8dp"
+                    android:textSize="14sp"
+                    android:textColor="#1A1A2E"
+                    android:hint="60"
+                    android:hintTextColor="#AAAACC"
+                    android:inputType="numberSigned"
+                    android:singleLine="true"
+                    android:gravity="center" />
+            </LinearLayout>
+
+            <!-- Save Button -->
+            <Button
+                android:id="@+id/btn_save_settings"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Save Settings"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_primary"
+                android:layout_marginBottom="10dp" />
+
+            <!-- Test Button -->
+            <Button
+                android:id="@+id/btn_test_now"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="📡  Send Now"
+                android:textSize="15sp"
+                android:textColor="#4A90E2"
+                android:background="@drawable/btn_outline" />
+        </LinearLayout>
+
+        <!-- Info Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:background="@drawable/card_info"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ℹ  Sent Parameters"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#1A3A5C"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="• username — configured username\n• time — current timestamp\n• lat / lng — GPS coordinates\n• alt — altitude (meters)\n• speed — speed (km/h)\n• accuracy — GPS accuracy (meters)\n• method — gps or network\n• provider — location provider\n• fixed — GPS fix status\n• device — device model\n• android — Android version"
+                android:textSize="12sp"
+                android:textColor="#2A4A6C"
+                android:lineSpacingMultiplier="1.5" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Target: gps.ctrlall.com/save.php"
+                android:textSize="11sp"
+                android:textColor="#4A7AAC"
+                android:fontFamily="monospace"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
