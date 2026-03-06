@@ -82,15 +82,19 @@ public class MainActivity extends AppCompatActivity {
             prefs.edit().putString("username", deviceId).apply();
         }
 
-        loadSettings();
-        setupListeners();
-
-        // 默认自动开启tracking
+        // 默认自动开启tracking（首次安装）
         if (!prefs.contains("is_running")) {
             prefs.edit().putBoolean("is_running", true).apply();
         }
+
+        loadSettings();
+        setupListeners();
+
+        // 启动时自动开启服务（不触发listener，避免重复）
         if (prefs.getBoolean("is_running", true)) {
+            switchTracking.setOnCheckedChangeListener(null); // 临时禁用listener
             switchTracking.setChecked(true);
+            setupListeners(); // 重新绑定listener
             startTracking();
             updateStatusCard(true);
         }
