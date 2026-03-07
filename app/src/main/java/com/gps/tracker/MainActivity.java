@@ -321,18 +321,45 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String getDeviceIdentifier() {
+        // 第一优先：手机号码
         try {
             TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
             if (tm != null && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
                     == PackageManager.PERMISSION_GRANTED) {
-                String imei = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                        ? tm.getImei() : tm.getDeviceId();
+
+                // Android 8+ 用 getLine1Number，旧版同样适用
+                String phone = tm.getLine1Number();
+                if (phone != null) {
+                    phone = phone.trim().replaceAll("[^+\\d]", ""); // 去掉空格等杂符
+                    if (phone.length() >= 7) return phone;          // 至少7位才算有效
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 第二优先：IMEI
+        try {
+            TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+            if (tm != null && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                String imei = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    imei = tm.getImei();
+                } else {
+                    imei = tm.getDeviceId();
+                }
                 if (imei != null && !imei.isEmpty()) return imei;
             }
         } catch (Exception ignored) {}
-        String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-        if (androidId != null && !androidId.isEmpty() && !androidId.equals("9774d56d682e549c"))
+
+        // 第三优先：Android ID
+        String androidId = Settings.Secure.getString(
+                getContentResolver(), Settings.Secure.ANDROID_ID);
+        if (androidId != null && !androidId.isEmpty()
+                && !androidId.equals("9774d56d682e549c")) {
             return androidId;
+        }
+
+        // 兜底：设备型号 + Build ID
         return Build.MODEL.replaceAll("\\s+", "_") + "_" + Build.ID;
     }
 
