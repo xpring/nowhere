@@ -148,19 +148,28 @@ public class MainActivity extends AppCompatActivity {
         });
 
         switchTracking.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            saveSettings();
+            // 只写 is_running，不调 saveSettings()（避免副作用）
+            prefs.edit().putBoolean("is_running", isChecked).apply();
             if (isChecked) startTracking(); else stopTracking();
             updateStatusCard(isChecked);
         });
 
         btnSaveSettings.setOnClickListener(v -> {
-            saveSettings();
+            String username = etUsername.getText().toString().trim();
+            if (username.isEmpty()) username = getDeviceIdentifier();
+            int interval = getIntervalValue();
+
+            // 只更新 prefs，不碰开关状态，不重启服务
+            prefs.edit()
+                .putString("username", username)
+                .putInt("interval_seconds", interval)
+                .apply();
+
+            // 直接通知服务更新参数，服务不中断
             if (serviceBound && trackingService != null) {
-                trackingService.updateSettings(
-                        etUsername.getText().toString().trim(),
-                        getIntervalValue()
-                );
+                trackingService.updateSettings(username, interval);
             }
+
             Toast.makeText(this, "Settings saved!", Toast.LENGTH_SHORT).show();
         });
 
@@ -209,9 +218,8 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit()
                 .putString("username", username)
                 .putInt("interval_seconds", getIntervalValue())
-                .putBoolean("is_running", switchTracking.isChecked())
-                .putString("emergency_phone", etEmergencyPhone.getText().toString().trim())
                 .apply();
+        // 注意：is_running 只在开关切换时写入，避免 Save 操作影响服务状态
     }
 
     private int getIntervalValue() {
@@ -222,11 +230,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startTracking() {
-        if (!hasLocationPermission()) { checkAndRequestPermissions(); switchTracking.setChecked(false); return; }
-        saveSettings();
+        if (!hasLocationPermission()) {
+            checkAndRequestPermissions();
+            // 不改开关状态，避免触发 listener 死循环
+            return;
+        }
         Intent si = new Intent(this, TrackingService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(si); else startService(si);
-        bindService(si, serviceConnection, Context.BIND_AUTO_CREATE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(si);
+        } else {
+            startService(si);
+        }
+        // 避免重复 bind
+        if (!serviceBound) {
+            bindService(si, serviceConnection, Context.BIND_AUTO_CREATE);
+        }
         requestBatteryOptimizationExemption();
     }
 
