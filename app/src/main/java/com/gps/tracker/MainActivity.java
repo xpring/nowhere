@@ -116,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadSettings() {
         etUsername.setText(prefs.getString("username", getDeviceIdentifier()));
-        int interval = prefs.getInt("interval_seconds", 60);
+        int interval = prefs.getInt("interval_seconds", 600);
         etInterval.setText(String.valueOf(interval));
         seekBarInterval.setProgress(intervalToSeekPosition(interval));
         tvIntervalDisplay.setText(formatInterval(interval));
@@ -260,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             int val = Integer.parseInt(etInterval.getText().toString());
             return Math.max(5, Math.min(3600, val));
-        } catch (NumberFormatException e) { return 60; }
+        } catch (NumberFormatException e) { return 600; }
     }
 
     private void startTracking() {
