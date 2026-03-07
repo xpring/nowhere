@@ -330,15 +330,34 @@
                 android:textSize="12sp"
                 android:textColor="#2A4A6C"
                 android:lineSpacingMultiplier="1.5" />
+</LinearLayout>
+
+        <!-- 免责声明 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/card_white">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="免责声明"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#888899"
+                android:layout_marginBottom="6dp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Target: gps.ctrlall.com/save.php"
+                android:text="本软件完全免费，本服务完全免费，不保证永久在线，不保证数据完全可靠。服务器仅保存定位必须信息，数据随时清空。"
                 android:textSize="11sp"
-                android:textColor="#4A7AAC"
-                android:fontFamily="monospace"
-                android:layout_marginTop="8dp" />
+                android:textColor="#AAAAAA"
+                android:lineSpacingMultiplier="1.6" />
+
         </LinearLayout>
 
     </LinearLayout>
