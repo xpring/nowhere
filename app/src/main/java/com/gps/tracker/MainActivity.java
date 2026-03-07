@@ -14,7 +14,6 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -38,6 +37,7 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText etUsername;
     private EditText etInterval;
+    private EditText etEmergencyPhone;
     private SeekBar seekBarInterval;
     private TextView tvIntervalDisplay;
     private Switch switchTracking;
@@ -46,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvLastSent;
     private Button btnSaveSettings;
     private Button btnTestNow;
+    private Button btnCall;
     private LinearLayout layoutStatusCard;
 
     private SharedPreferences prefs;
@@ -76,13 +77,9 @@ public class MainActivity extends AppCompatActivity {
         initViews();
         checkAndRequestPermissions();
 
-        // 首次启动初始化设备标识作为用户名
         if (!prefs.contains("username")) {
-            String deviceId = getDeviceIdentifier();
-            prefs.edit().putString("username", deviceId).apply();
+            prefs.edit().putString("username", getDeviceIdentifier()).apply();
         }
-
-        // 默认自动开启tracking（首次安装）
         if (!prefs.contains("is_running")) {
             prefs.edit().putBoolean("is_running", true).apply();
         }
@@ -90,70 +87,19 @@ public class MainActivity extends AppCompatActivity {
         loadSettings();
         setupListeners();
 
-        // 启动时自动开启服务（不触发listener，避免重复）
         if (prefs.getBoolean("is_running", true)) {
-            switchTracking.setOnCheckedChangeListener(null); // 临时禁用listener
+            switchTracking.setOnCheckedChangeListener(null);
             switchTracking.setChecked(true);
-            setupListeners(); // 重新绑定listener
+            setupListeners();
             startTracking();
             updateStatusCard(true);
         }
     }
 
-    private String getDeviceIdentifier() {
-        // 优先尝试获取 IMEI（需要权限）
-        try {
-            TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-            if (tm != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-                            == PackageManager.PERMISSION_GRANTED) {
-                        String imei = null;
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            imei = tm.getImei();
-                        } else {
-                            imei = tm.getDeviceId();
-                        }
-                        if (imei != null && !imei.isEmpty()) return imei;
-                    }
-                } else {
-                    String imei = tm.getDeviceId();
-                    if (imei != null && !imei.isEmpty()) return imei;
-                }
-            }
-        } catch (Exception ignored) {}
-
-        // 次选：Android ID（重置后会变，但无需权限）
-        String androidId = Settings.Secure.getString(
-                getContentResolver(), Settings.Secure.ANDROID_ID);
-        if (androidId != null && !androidId.isEmpty()
-                && !androidId.equals("9774d56d682e549c")) {
-            return androidId;
-        }
-
-        // 兜底：设备型号+Build序列号
-        String serial = "";
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-                        == PackageManager.PERMISSION_GRANTED) {
-                    serial = Build.getSerial();
-                }
-            } else {
-                serial = Build.SERIAL;
-            }
-        } catch (Exception ignored) {}
-
-        if (!serial.isEmpty() && !serial.equals("unknown")) {
-            return Build.MODEL.replaceAll("\\s+", "_") + "_" + serial;
-        }
-
-        return Build.MODEL.replaceAll("\\s+", "_") + "_" + Build.ID;
-    }
-
     private void initViews() {
         etUsername = findViewById(R.id.et_username);
         etInterval = findViewById(R.id.et_interval);
+        etEmergencyPhone = findViewById(R.id.et_emergency_phone);
         seekBarInterval = findViewById(R.id.seekbar_interval);
         tvIntervalDisplay = findViewById(R.id.tv_interval_display);
         switchTracking = findViewById(R.id.switch_tracking);
@@ -162,23 +108,19 @@ public class MainActivity extends AppCompatActivity {
         tvLastSent = findViewById(R.id.tv_last_sent);
         btnSaveSettings = findViewById(R.id.btn_save_settings);
         btnTestNow = findViewById(R.id.btn_test_now);
+        btnCall = findViewById(R.id.btn_call);
         layoutStatusCard = findViewById(R.id.layout_status_card);
     }
 
     private void loadSettings() {
-        String username = prefs.getString("username", getDeviceIdentifier());
+        etUsername.setText(prefs.getString("username", getDeviceIdentifier()));
         int interval = prefs.getInt("interval_seconds", 60);
-        boolean isRunning = prefs.getBoolean("is_running", true);
-
-        etUsername.setText(username);
         etInterval.setText(String.valueOf(interval));
-
-        int position = intervalToSeekPosition(interval);
-        seekBarInterval.setProgress(position);
+        seekBarInterval.setProgress(intervalToSeekPosition(interval));
         tvIntervalDisplay.setText(formatInterval(interval));
-
-        switchTracking.setChecked(isRunning);
-        updateStatusCard(isRunning);
+        etEmergencyPhone.setText(prefs.getString("emergency_phone", ""));
+        switchTracking.setChecked(prefs.getBoolean("is_running", true));
+        updateStatusCard(prefs.getBoolean("is_running", true));
     }
 
     private void setupListeners() {
@@ -207,11 +149,7 @@ public class MainActivity extends AppCompatActivity {
 
         switchTracking.setOnCheckedChangeListener((buttonView, isChecked) -> {
             saveSettings();
-            if (isChecked) {
-                startTracking();
-            } else {
-                stopTracking();
-            }
+            if (isChecked) startTracking(); else stopTracking();
             updateStatusCard(isChecked);
         });
 
@@ -231,20 +169,48 @@ public class MainActivity extends AppCompatActivity {
                 trackingService.sendNow();
                 Toast.makeText(this, "Sending location now...", Toast.LENGTH_SHORT).show();
             } else {
-                Toast.makeText(this, "Service not running. Enable tracking first.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Service not running.", Toast.LENGTH_SHORT).show();
             }
+        });
+
+        btnCall.setOnClickListener(v -> {
+            String phone = etEmergencyPhone.getText().toString().trim();
+            if (phone.isEmpty()) {
+                Toast.makeText(this, "Please enter an emergency phone number first.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            new AlertDialog.Builder(this)
+                .setTitle("Emergency Call")
+                .setMessage("Call " + phone + " ?")
+                .setPositiveButton("📞  Call Now", (d, w) -> {
+                    Intent callIntent = new Intent(Intent.ACTION_CALL);
+                    callIntent.setData(Uri.parse("tel:" + phone));
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+                            == PackageManager.PERMISSION_GRANTED) {
+                        startActivity(callIntent);
+                    } else {
+                        ActivityCompat.requestPermissions(this,
+                                new String[]{Manifest.permission.CALL_PHONE},
+                                PERMISSION_REQUEST_CODE + 2);
+                        // 用拨号盘兜底
+                        Intent dialIntent = new Intent(Intent.ACTION_DIAL);
+                        dialIntent.setData(Uri.parse("tel:" + phone));
+                        startActivity(dialIntent);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
         });
     }
 
     private void saveSettings() {
         String username = etUsername.getText().toString().trim();
         if (username.isEmpty()) username = getDeviceIdentifier();
-        int interval = getIntervalValue();
-        boolean isRunning = switchTracking.isChecked();
         prefs.edit()
                 .putString("username", username)
-                .putInt("interval_seconds", interval)
-                .putBoolean("is_running", isRunning)
+                .putInt("interval_seconds", getIntervalValue())
+                .putBoolean("is_running", switchTracking.isChecked())
+                .putString("emergency_phone", etEmergencyPhone.getText().toString().trim())
                 .apply();
     }
 
@@ -252,35 +218,21 @@ public class MainActivity extends AppCompatActivity {
         try {
             int val = Integer.parseInt(etInterval.getText().toString());
             return Math.max(5, Math.min(3600, val));
-        } catch (NumberFormatException e) {
-            return 60;
-        }
+        } catch (NumberFormatException e) { return 60; }
     }
 
     private void startTracking() {
-        if (!hasLocationPermission()) {
-            checkAndRequestPermissions();
-            switchTracking.setChecked(false);
-            return;
-        }
+        if (!hasLocationPermission()) { checkAndRequestPermissions(); switchTracking.setChecked(false); return; }
         saveSettings();
-        Intent serviceIntent = new Intent(this, TrackingService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent);
-        } else {
-            startService(serviceIntent);
-        }
-        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+        Intent si = new Intent(this, TrackingService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(si); else startService(si);
+        bindService(si, serviceConnection, Context.BIND_AUTO_CREATE);
         requestBatteryOptimizationExemption();
     }
 
     private void stopTracking() {
-        if (serviceBound) {
-            unbindService(serviceConnection);
-            serviceBound = false;
-        }
-        Intent serviceIntent = new Intent(this, TrackingService.class);
-        stopService(serviceIntent);
+        if (serviceBound) { unbindService(serviceConnection); serviceBound = false; }
+        stopService(new Intent(this, TrackingService.class));
     }
 
     private void updateStatusCard(boolean isRunning) {
@@ -308,8 +260,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (prefs.getBoolean("is_running", true) && !serviceBound) {
-            Intent serviceIntent = new Intent(this, TrackingService.class);
-            bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+            bindService(new Intent(this, TrackingService.class), serviceConnection, Context.BIND_AUTO_CREATE);
         }
         updateUI();
     }
@@ -317,10 +268,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (serviceBound) {
-            unbindService(serviceConnection);
-            serviceBound = false;
-        }
+        if (serviceBound) { unbindService(serviceConnection); serviceBound = false; }
     }
 
     private boolean hasLocationPermission() {
@@ -329,36 +277,34 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkAndRequestPermissions() {
-        List<String> permsNeeded = new ArrayList<>();
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            permsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-                != PackageManager.PERMISSION_GRANTED) {
-            permsNeeded.add(Manifest.permission.READ_PHONE_STATE);
+        List<String> perms = new ArrayList<>();
+        String[] required = {
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.CALL_PHONE
+        };
+        for (String p : required) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED)
+                perms.add(p);
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                permsNeeded.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
+                    != PackageManager.PERMISSION_GRANTED)
+                perms.add(Manifest.permission.POST_NOTIFICATIONS);
         }
-        if (!permsNeeded.isEmpty()) {
-            ActivityCompat.requestPermissions(this,
-                    permsNeeded.toArray(new String[0]), PERMISSION_REQUEST_CODE);
-        }
+        if (!perms.isEmpty())
+            ActivityCompat.requestPermissions(this, perms.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                     != PackageManager.PERMISSION_GRANTED) {
                 new AlertDialog.Builder(this)
-                        .setTitle("Background Location")
-                        .setMessage("Please select 'Allow all the time' for background tracking.")
-                        .setPositiveButton("OK", (d, w) -> ActivityCompat.requestPermissions(this,
-                                new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
-                                PERMISSION_REQUEST_CODE + 1))
-                        .setNegativeButton("Skip", null)
-                        .show();
+                    .setTitle("Background Location")
+                    .setMessage("Please select 'Allow all the time' for background tracking.")
+                    .setPositiveButton("OK", (d, w) -> ActivityCompat.requestPermissions(this,
+                            new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
+                            PERMISSION_REQUEST_CODE + 1))
+                    .setNegativeButton("Skip", null).show();
             }
         }
     }
@@ -367,40 +313,47 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                intent.setData(Uri.parse("package:" + getPackageName()));
-                try { startActivity(intent); } catch (Exception ignored) {}
+                Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                i.setData(Uri.parse("package:" + getPackageName()));
+                try { startActivity(i); } catch (Exception ignored) {}
             }
         }
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    private String getDeviceIdentifier() {
+        try {
+            TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+            if (tm != null && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                String imei = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        ? tm.getImei() : tm.getDeviceId();
+                if (imei != null && !imei.isEmpty()) return imei;
+            }
+        } catch (Exception ignored) {}
+        String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        if (androidId != null && !androidId.isEmpty() && !androidId.equals("9774d56d682e549c"))
+            return androidId;
+        return Build.MODEL.replaceAll("\\s+", "_") + "_" + Build.ID;
     }
 
     private int intervalToSeekPosition(int seconds) {
         if (seconds <= 5) return 0;
         if (seconds >= 3600) return 100;
-        double log = Math.log(seconds) / Math.log(3600);
-        return (int)(log * 100);
+        return (int)(Math.log(seconds) / Math.log(3600) * 100);
     }
 
     private int seekPositionToInterval(int progress) {
-        double seconds = Math.pow(3600, progress / 100.0);
-        seconds = Math.max(5, Math.min(3600, seconds));
-        if (seconds < 30) return (int)(Math.round(seconds / 5.0) * 5);
-        if (seconds < 120) return (int)(Math.round(seconds / 10.0) * 10);
-        if (seconds < 600) return (int)(Math.round(seconds / 30.0) * 30);
-        return (int)(Math.round(seconds / 60.0) * 60);
+        double s = Math.pow(3600, progress / 100.0);
+        s = Math.max(5, Math.min(3600, s));
+        if (s < 30) return (int)(Math.round(s / 5.0) * 5);
+        if (s < 120) return (int)(Math.round(s / 10.0) * 10);
+        if (s < 600) return (int)(Math.round(s / 30.0) * 30);
+        return (int)(Math.round(s / 60.0) * 60);
     }
 
     private String formatInterval(int seconds) {
         if (seconds < 60) return seconds + " seconds";
-        if (seconds < 3600) {
-            int m = seconds / 60, s = seconds % 60;
-            return s == 0 ? m + " min" : m + " min " + s + " sec";
-        }
+        if (seconds < 3600) { int m = seconds/60, s = seconds%60; return s==0 ? m+" min" : m+" min "+s+" sec"; }
         return (seconds / 3600) + " hour";
     }
 }
