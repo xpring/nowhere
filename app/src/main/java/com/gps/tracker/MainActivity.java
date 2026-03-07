@@ -47,6 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnSaveSettings;
     private Button btnTestNow;
     private Button btnCall;
+    private Button btnShare;
     private LinearLayout layoutStatusCard;
 
     private SharedPreferences prefs;
@@ -109,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
         btnSaveSettings = findViewById(R.id.btn_save_settings);
         btnTestNow = findViewById(R.id.btn_test_now);
         btnCall = findViewById(R.id.btn_call);
+        btnShare = findViewById(R.id.btn_share);
         layoutStatusCard = findViewById(R.id.layout_status_card);
     }
 
@@ -181,7 +183,39 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Service not running.", Toast.LENGTH_SHORT).show();
             }
         });
+        
+        btnShare.setOnClickListener(v -> {
+            String username = etUsername.getText().toString().trim();
+            if (username.isEmpty()) {
+                Toast.makeText(this, "请先设置用户名", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String url = "http://gps.ctrlall.com/map.php?username="
+                    + Uri.encode(username) + "&period=24h";
 
+            // 弹出选择：复制 或 分享
+            new AlertDialog.Builder(this)
+                .setTitle("分享轨迹链接")
+                .setMessage(url)
+                .setPositiveButton("📋 复制链接", (d, w) -> {
+                    android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    android.content.ClipData clip =
+                        android.content.ClipData.newPlainText("GPS轨迹链接", url);
+                    cm.setPrimaryClip(clip);
+                    Toast.makeText(this, "链接已复制", Toast.LENGTH_SHORT).show();
+                })
+                .setNeutralButton("🔗 分享", (d, w) -> {
+                    Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                    shareIntent.setType("text/plain");
+                    shareIntent.putExtra(Intent.EXTRA_TEXT, url);
+                    shareIntent.putExtra(Intent.EXTRA_SUBJECT, "GPS实时轨迹");
+                    startActivity(Intent.createChooser(shareIntent, "分享到"));
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        });
+        
         btnCall.setOnClickListener(v -> {
             String phone = etEmergencyPhone.getText().toString().trim();
             if (phone.isEmpty()) {
