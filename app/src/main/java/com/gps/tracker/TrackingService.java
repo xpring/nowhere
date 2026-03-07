@@ -53,7 +53,7 @@ public class TrackingService extends Service {
     private ExecutorService networkExecutor;
 
     private String username = "user01";
-    private int intervalSeconds = 60;
+    private int intervalSeconds = 600;
     private Location lastLocation = null;
     private String lastLocationString = null;
     private String lastSentString = null;
@@ -158,7 +158,7 @@ public class TrackingService extends Service {
 
     private void loadSettings() {
         username = prefs.getString("username", "user01");
-        intervalSeconds = prefs.getInt("interval_seconds", 60);
+        intervalSeconds = prefs.getInt("interval_seconds", 600);
     }
 
     @SuppressWarnings({"MissingPermission"})
