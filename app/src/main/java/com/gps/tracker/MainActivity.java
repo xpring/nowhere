@@ -30,6 +30,9 @@ import androidx.core.content.ContextCompat;
 import java.util.ArrayList;
 import java.util.List;
 
+import android.os.Looper;
+import android.widget.ProgressBar;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_REQUEST_CODE = 100;
@@ -53,6 +56,10 @@ public class MainActivity extends AppCompatActivity {
     private SharedPreferences prefs;
     private TrackingService trackingService;
     private boolean serviceBound = false;
+
+    private ProgressBar progressUpdate;
+    private TextView tvUpdateStatus;
+    private Button btnUpdate;
 
     private ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -112,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
         btnCall = findViewById(R.id.btn_call);
         btnShare = findViewById(R.id.btn_share);
         layoutStatusCard = findViewById(R.id.layout_status_card);
+        progressUpdate  = findViewById(R.id.progress_update);
+        tvUpdateStatus  = findViewById(R.id.tv_update_status);
+        btnUpdate       = findViewById(R.id.btn_update);
     }
 
     private void loadSettings() {
@@ -242,6 +252,24 @@ public class MainActivity extends AppCompatActivity {
                     }
                 })
                 .setNegativeButton("Cancel", null)
+                .show();
+        });
+        btnUpdate.setOnClickListener(v -> {
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("更新应用")
+                .setMessage("将从服务器下载最新版本并安装，是否继续？")
+                .setPositiveButton("确定", (d, w) -> {
+                    btnUpdate.setEnabled(false);
+                    btnUpdate.setText("更新中...");
+                    UpdateManager mgr = new UpdateManager(this, tvUpdateStatus, progressUpdate);
+                    mgr.startUpdate();
+                    // 30秒后恢复按钮
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        btnUpdate.setEnabled(true);
+                        btnUpdate.setText("⬇  检查并更新");
+                    }, 30000);
+                })
+                .setNegativeButton("取消", null)
                 .show();
         });
     }
