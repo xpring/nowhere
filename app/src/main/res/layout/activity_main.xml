@@ -331,7 +331,69 @@
                 android:textColor="#2A4A6C"
                 android:lineSpacingMultiplier="1.5" />
 </LinearLayout>
+<!-- 更新卡片 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/card_white">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🔄  应用更新"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#1A1A2E" />
+
+                <TextView
+                    android:id="@+id/tv_version"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="v1.0.0"
+                    android:textSize="12sp"
+                    android:textColor="#AAAAAA" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_update_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="从服务器下载最新版本并自动安装"
+                android:textSize="12sp"
+                android:textColor="#888899"
+                android:layout_marginBottom="12dp" />
+
+            <ProgressBar
+                android:id="@+id/progress_update"
+                style="@android:style/Widget.ProgressBar.Horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:max="100"
+                android:progress="0"
+                android:visibility="gone"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btn_update"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="⬇  检查并更新"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_primary" />
+
+        </LinearLayout>
         <!-- 免责声明 -->
         <LinearLayout
             android:layout_width="match_parent"
