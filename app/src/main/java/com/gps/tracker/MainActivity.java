@@ -160,14 +160,14 @@ public class MainActivity extends AppCompatActivity {
             String username = etUsername.getText().toString().trim();
             if (username.isEmpty()) username = getDeviceIdentifier();
             int interval = getIntervalValue();
+            String emergencyPhone = etEmergencyPhone.getText().toString().trim();
 
-            // 只更新 prefs，不碰开关状态，不重启服务
             prefs.edit()
                 .putString("username", username)
                 .putInt("interval_seconds", interval)
+                .putString("emergency_phone", emergencyPhone)
                 .apply();
 
-            // 直接通知服务更新参数，服务不中断
             if (serviceBound && trackingService != null) {
                 trackingService.updateSettings(username, interval);
             }
