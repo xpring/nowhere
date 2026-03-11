@@ -212,6 +212,8 @@ public class TrackingService extends Service {
                 double lat = 0.0, lng = 0.0, alt = 0.0, speed = 0.0, accuracy = 0.0;
                 String method = "none";
                 String provider = "N/A";
+                // 获取电池电量
+                int battery = getBatteryLevel();
 
                 if (lastLocation != null) {
                     lat = lastLocation.getLatitude();
@@ -236,6 +238,7 @@ public class TrackingService extends Service {
                     + "&fixed=" + (gpsFixed ? "1" : "0")
                     + "&device=" + urlEncode(Build.MODEL)
                     + "&android=" + Build.VERSION.SDK_INT;
+                    + "&battery=" + battery;
 
                 String fullUrl = TARGET_URL + "?" + params;
                 Log.d(TAG, "Sending: " + fullUrl);
@@ -306,6 +309,23 @@ public class TrackingService extends Service {
         return sdf.format(new Date());
     }
 
+    private int getBatteryLevel() {
+        try {
+            android.content.Intent batteryIntent = registerReceiver(null,
+                new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+            if (batteryIntent != null) {
+                int level = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+                int scale = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
+                if (level >= 0 && scale > 0) {
+                    return (int)((level / (float) scale) * 100);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Battery read error", e);
+        }
+        return -1;
+    }
+    
     private String urlEncode(String value) {
         try {
             return java.net.URLEncoder.encode(value, "UTF-8");
