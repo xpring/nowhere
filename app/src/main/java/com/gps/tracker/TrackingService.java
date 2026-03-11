@@ -207,43 +207,40 @@ public class TrackingService extends Service {
     private void sendLocationData() {
         networkExecutor.execute(() -> {
             try {
-                // Build payload
                 String now = getCurrentTimestamp();
                 double lat = 0.0, lng = 0.0, alt = 0.0, speed = 0.0, accuracy = 0.0;
                 String method = "none";
                 String provider = "N/A";
-                // 获取电池电量
-                int battery = getBatteryLevel();
 
                 if (lastLocation != null) {
-                    lat = lastLocation.getLatitude();
-                    lng = lastLocation.getLongitude();
-                    alt = lastLocation.getAltitude();
-                    speed = lastLocation.getSpeed() * 3.6; // m/s -> km/h
+                    lat      = lastLocation.getLatitude();
+                    lng      = lastLocation.getLongitude();
+                    alt      = lastLocation.getAltitude();
+                    speed    = lastLocation.getSpeed() * 3.6;
                     accuracy = lastLocation.getAccuracy();
                     provider = lastLocation.getProvider() != null ? lastLocation.getProvider() : "unknown";
-                    method = provider.equals(LocationManager.GPS_PROVIDER) ? "gps" : "network";
+                    method   = provider.equals(LocationManager.GPS_PROVIDER) ? "gps" : "network";
                 }
 
-                // Build query string
+                int battery = getBatteryLevel();
+
                 String params = "username=" + urlEncode(username)
-                    + "&time=" + urlEncode(now)
-                    + "&lat=" + lat
-                    + "&lng=" + lng
-                    + "&alt=" + String.format(Locale.US, "%.2f", alt)
-                    + "&speed=" + String.format(Locale.US, "%.2f", speed)
-                    + "&accuracy=" + String.format(Locale.US, "%.2f", accuracy)
-                    + "&method=" + urlEncode(method)
-                    + "&provider=" + urlEncode(provider)
-                    + "&fixed=" + (gpsFixed ? "1" : "0")
-                    + "&device=" + urlEncode(Build.MODEL)
-                    + "&android=" + Build.VERSION.SDK_INT;
-                    + "&battery=" + battery;
+                        + "&time="     + urlEncode(now)
+                        + "&lat="      + lat
+                        + "&lng="      + lng
+                        + "&alt="      + String.format(Locale.US, "%.2f", alt)
+                        + "&speed="    + String.format(Locale.US, "%.2f", speed)
+                        + "&accuracy=" + String.format(Locale.US, "%.2f", accuracy)
+                        + "&method="   + urlEncode(method)
+                        + "&provider=" + urlEncode(provider)
+                        + "&fixed="    + (gpsFixed ? "1" : "0")
+                        + "&device="   + urlEncode(Build.MODEL)
+                        + "&android="  + Build.VERSION.SDK_INT
+                        + "&battery="  + battery;
 
                 String fullUrl = TARGET_URL + "?" + params;
                 Log.d(TAG, "Sending: " + fullUrl);
 
-                // HTTP GET request
                 URL url = new URL(fullUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -264,13 +261,9 @@ public class TrackingService extends Service {
                 lastSentString = now + " → HTTP " + responseCode;
                 Log.d(TAG, "Response " + responseCode + ": " + response);
 
-                // Also try POST with same data
-                // (commented out — use GET by default as server may expect it)
-                // sendPost(params, now);
-
                 updateNotification(gpsFixed
-                    ? String.format(Locale.US, "Tracking: %.5f, %.5f", lat, lng)
-                    : "Tracking active (waiting for GPS fix)");
+                        ? String.format(Locale.US, "Tracking: %.5f, %.5f | 🔋%d%%", lat, lng, battery)
+                        : "Tracking active (waiting for GPS fix)");
 
             } catch (Exception e) {
                 Log.e(TAG, "Error sending location", e);
