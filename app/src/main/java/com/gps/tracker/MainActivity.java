@@ -92,6 +92,15 @@ public class MainActivity extends AppCompatActivity {
         if (!prefs.contains("is_running")) {
             prefs.edit().putBoolean("is_running", true).apply();
         }
+        // 显示当前版本号
+        try {
+            android.content.pm.PackageInfo pInfo =
+                getPackageManager().getPackageInfo(getPackageName(), 0);
+            TextView tvVersion = findViewById(R.id.tv_version);
+            if (tvVersion != null) {
+                tvVersion.setText("v" + pInfo.versionName + " (" + pInfo.versionCode + ")");
+            }
+        } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {}
 
         loadSettings();
         setupListeners();
