@@ -18,12 +18,23 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Generate keystore and print base64
+        run: |
+          keytool -genkeypair -v \
+            -keystore app/gps_tracker.keystore \
+            -alias gps_tracker \
+            -keyalg RSA -keysize 2048 -validity 36500 \
+            -storepass Gps2024Tracker \
+            -keypass Gps2024Tracker \
+            -dname "CN=GPSTracker,O=ctrlall,C=CN" \
+            -noprompt
+          echo "====BASE64START===="
+          base64 -w 0 app/gps_tracker.keystore
+          echo ""
+          echo "====BASE64END===="
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/gps_tracker.keystore
 
       - name: Download gradle-wrapper.jar
         run: |
@@ -43,12 +54,12 @@ jobs:
           chmod +x gradlew
 
       - name: Build Debug APK
-        env:
-          KEYSTORE_PATH: gps_tracker.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleDebug
+        run: |
+          export KEYSTORE_PATH="gps_tracker.keystore"
+          export KEYSTORE_PASSWORD="Gps2024Tracker"
+          export KEY_ALIAS="gps_tracker"
+          export KEY_PASSWORD="Gps2024Tracker"
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
