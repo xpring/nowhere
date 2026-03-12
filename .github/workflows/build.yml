@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,6 +45,15 @@ jobs:
           EOF
           chmod +x gradlew
 
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(grep versionName app/build.gradle | sed 's/.*"\(.*\)".*/\1/' | tr -d '[:space:]')
+          CODE=$(grep versionCode app/build.gradle | grep -o '[0-9]*' | tr -d '[:space:]')
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build Debug APK
         env:
           KEYSTORE_PATH: gps_tracker.keystore
@@ -50,9 +62,41 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             app/build/outputs/apk/debug/gps_tracker_v${{ steps.version.outputs.name }}.apk
+
+      - name: Delete existing release if same tag
+        run: |
+          gh release delete ${{ steps.version.outputs.tag }} --yes 2>/dev/null || true
+          git push --delete origin ${{ steps.version.outputs.tag }} 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: GPSTracker-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "GPS Tracker v${{ steps.version.outputs.name }}"
+          body: |
+            ## GPS Tracker v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
+
+            ### 下载安装
+            点击下方 `gps_tracker_v${{ steps.version.outputs.name }}.apk` 下载安装。
+
+            ### 安装说明
+            1. 下载 APK 文件
+            2. 手机设置中开启「允许安装未知来源应用」
+            3. 打开 APK 文件安装
+            4. 授予定位权限后即可使用
+
+            ---
+            构建时间：${{ github.event.head_commit.timestamp }}
+            提交：${{ github.sha }}
+          files: |
+            app/build/outputs/apk/debug/gps_tracker_v${{ steps.version.outputs.name }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
