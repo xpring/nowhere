@@ -1,15 +1,3 @@
-- name: Generate keystore (run once, then remove this step)
-        run: |
-          keytool -genkeypair -v \
-            -keystore app/gps_tracker.keystore \
-            -alias gps_tracker \
-            -keyalg RSA -keysize 2048 -validity 36500 \
-            -storepass ctrlall \
-            -keypass 517429Xp \
-            -dname "CN=GPS Tracker,O=ctrlall,C=CN" \
-            -noprompt
-          base64 app/gps_tracker.keystore
-          
 name: Build APK
 
 on:
@@ -32,6 +20,18 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Generate keystore (run once, then remove this step)
+        run: |
+          keytool -genkeypair -v \
+            -keystore app/gps_tracker.keystore \
+            -alias gps_tracker \
+            -keyalg RSA -keysize 2048 -validity 36500 \
+            -storepass ctrlall \
+            -keypass 517429Xp \
+            -dname "CN=GPS Tracker,O=ctrlall,C=CN" \
+            -noprompt
+          base64 app/gps_tracker.keystore
 
       - name: Download gradle-wrapper.jar
         run: |
