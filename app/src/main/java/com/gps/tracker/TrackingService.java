@@ -7,23 +7,25 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.BatteryManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
@@ -41,7 +43,9 @@ public class TrackingService extends Service {
     private static final String TARGET_URL = "http://gps.ctrlall.com/save.php";
     private static final String PREFS_NAME = "GPSTrackerPrefs";
 
-    // Binder for Activity binding
+    // 最小位移（米），小于此距离不重复上报
+    private static final float MIN_DISPLACEMENT_METERS = 30.0f;
+
     private final IBinder binder = new LocalBinder();
     public class LocalBinder extends Binder {
         TrackingService getService() { return TrackingService.this; }
@@ -51,10 +55,13 @@ public class TrackingService extends Service {
     private LocationManager locationManager;
     private Handler handler;
     private ExecutorService networkExecutor;
+    private PowerManager.WakeLock wakeLock;
 
     private String username = "user01";
     private int intervalSeconds = 600;
+
     private Location lastLocation = null;
+    private Location lastReportedLocation = null;  // 上次上报的位置
     private String lastLocationString = null;
     private String lastSentString = null;
     private boolean gpsFixed = false;
@@ -62,37 +69,53 @@ public class TrackingService extends Service {
     private Runnable trackingRunnable = new Runnable() {
         @Override
         public void run() {
-            sendLocationData();
+            // 判断是否需要上报（位移过小则跳过）
+            if (shouldReport()) {
+                sendLocationData();
+            } else {
+                Log.d(TAG, "Skipped: displacement too small");
+                lastSentString = getCurrentTimestamp() + " → 位移过小，跳过";
+            }
             handler.postDelayed(this, intervalSeconds * 1000L);
         }
     };
 
-    private LocationListener locationListener = new LocationListener() {
+    // 位置监听：使用被动模式 + GPS 混合
+    private LocationListener gpsListener = new LocationListener() {
         @Override
         public void onLocationChanged(Location location) {
-            lastLocation = location;
-            gpsFixed = true;
-            String provider = location.getProvider();
-            lastLocationString = String.format(Locale.US,
-                "Lat: %.6f, Lng: %.6f (±%.0fm) [%s]",
-                location.getLatitude(), location.getLongitude(),
-                location.getAccuracy(), provider);
-            Log.d(TAG, "Location updated: " + lastLocationString);
-            updateNotification("GPS Fixed: " + lastLocationString);
+            // 精度过差则忽略
+            if (location.getAccuracy() > 200) return;
+            if (lastLocation == null || isBetterLocation(location, lastLocation)) {
+                lastLocation = location;
+                gpsFixed = true;
+                String provider = location.getProvider() != null ? location.getProvider() : "unknown";
+                lastLocationString = String.format(Locale.US,
+                    "Lat: %.6f, Lng: %.6f (±%.0fm) [%s]",
+                    location.getLatitude(), location.getLongitude(),
+                    location.getAccuracy(), provider);
+            }
         }
+        @Override public void onStatusChanged(String p, int s, Bundle e) {}
+        @Override public void onProviderEnabled(String p) {}
+        @Override public void onProviderDisabled(String p) {}
+    };
 
+    private LocationListener networkListener = new LocationListener() {
         @Override
-        public void onStatusChanged(String provider, int status, Bundle extras) {}
-
-        @Override
-        public void onProviderEnabled(String provider) {
-            Log.d(TAG, "Provider enabled: " + provider);
+        public void onLocationChanged(Location location) {
+            if (lastLocation == null || isBetterLocation(location, lastLocation)) {
+                lastLocation = location;
+                String provider = location.getProvider() != null ? location.getProvider() : "network";
+                lastLocationString = String.format(Locale.US,
+                    "Lat: %.6f, Lng: %.6f (±%.0fm) [%s]",
+                    location.getLatitude(), location.getLongitude(),
+                    location.getAccuracy(), provider);
+            }
         }
-
-        @Override
-        public void onProviderDisabled(String provider) {
-            Log.d(TAG, "Provider disabled: " + provider);
-        }
+        @Override public void onStatusChanged(String p, int s, Bundle e) {}
+        @Override public void onProviderEnabled(String p) {}
+        @Override public void onProviderDisabled(String p) {}
     };
 
     @Override
@@ -103,36 +126,30 @@ public class TrackingService extends Service {
         networkExecutor = Executors.newSingleThreadExecutor();
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         createNotificationChannel();
-        Log.d(TAG, "TrackingService created");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         loadSettings();
-        startForeground(NOTIFICATION_ID, buildNotification("Starting GPS tracking..."));
+        startForeground(NOTIFICATION_ID, buildNotification("GPS Tracker 运行中"));
         startLocationUpdates();
         handler.removeCallbacks(trackingRunnable);
-        handler.post(trackingRunnable);
-        Log.d(TAG, "TrackingService started. Interval: " + intervalSeconds + "s, User: " + username);
-        return START_STICKY; // Restart if killed
+        handler.postDelayed(trackingRunnable, 10000L); // 启动后10秒发第一次
+        return START_STICKY;
     }
 
     @Override
-    public IBinder onBind(Intent intent) {
-        return binder;
-    }
+    public IBinder onBind(Intent intent) { return binder; }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         handler.removeCallbacks(trackingRunnable);
         stopLocationUpdates();
+        releaseWakeLock();
         networkExecutor.shutdown();
         prefs.edit().putBoolean("is_running", false).apply();
-        Log.d(TAG, "TrackingService destroyed");
     }
-
-    // ---- Public API for Activity ----
 
     public void updateSettings(String newUsername, int newInterval) {
         username = newUsername;
@@ -141,56 +158,66 @@ public class TrackingService extends Service {
             .putString("username", username)
             .putInt("interval_seconds", intervalSeconds)
             .apply();
-        // Restart timer with new interval
         handler.removeCallbacks(trackingRunnable);
         handler.postDelayed(trackingRunnable, intervalSeconds * 1000L);
-        Log.d(TAG, "Settings updated: user=" + username + ", interval=" + intervalSeconds);
+        // 重新注册定位，使用新间隔
+        stopLocationUpdates();
+        startLocationUpdates();
     }
 
-    public void sendNow() {
-        sendLocationData();
-    }
-
+    public void sendNow() { sendLocationData(); }
     public String getLastLocationString() { return lastLocationString; }
     public String getLastSentString() { return lastSentString; }
-
-    // ---- Internal ----
 
     private void loadSettings() {
         username = prefs.getString("username", "user01");
         intervalSeconds = prefs.getInt("interval_seconds", 600);
     }
 
-    @SuppressWarnings({"MissingPermission"})
+    @SuppressWarnings("MissingPermission")
     private void startLocationUpdates() {
         try {
-            // Request from both GPS and Network providers
+            // 关键优化：minTime 设为间隔的一半，minDistance 设为30米
+            // 避免 GPS 持续开启，只在需要时唤醒
+            long minTime = (intervalSeconds * 1000L) / 2;
+            float minDistance = MIN_DISPLACEMENT_METERS;
+
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    5000L,    // min time: 5 seconds
-                    0f,       // min distance: 0 meters
-                    locationListener,
+                    minTime,
+                    minDistance,
+                    gpsListener,
                     Looper.getMainLooper()
                 );
-                // Get last known immediately
+                // 立即获取上次缓存位置
                 Location last = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                if (last != null) locationListener.onLocationChanged(last);
+                if (last != null) gpsListener.onLocationChanged(last);
             }
+
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    5000L,
-                    0f,
-                    locationListener,
+                    minTime,
+                    minDistance,
+                    networkListener,
                     Looper.getMainLooper()
                 );
                 Location last = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                if (last != null && (lastLocation == null ||
-                        last.getTime() > lastLocation.getTime())) {
-                    locationListener.onLocationChanged(last);
-                }
+                if (last != null) networkListener.onLocationChanged(last);
             }
+
+            // 被动定位：复用其他 APP 的定位结果，完全不耗电
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ||
+                locationManager.getAllProviders().contains(LocationManager.PASSIVE_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.PASSIVE_PROVIDER,
+                    0, 0,
+                    gpsListener,
+                    Looper.getMainLooper()
+                );
+            }
+
         } catch (SecurityException e) {
             Log.e(TAG, "Location permission denied", e);
         }
@@ -198,13 +225,26 @@ public class TrackingService extends Service {
 
     private void stopLocationUpdates() {
         try {
-            locationManager.removeUpdates(locationListener);
+            locationManager.removeUpdates(gpsListener);
+            locationManager.removeUpdates(networkListener);
         } catch (Exception e) {
             Log.e(TAG, "Error stopping location updates", e);
         }
     }
 
+    // 判断是否需要上报（静止时减少上报）
+    private boolean shouldReport() {
+        if (lastLocation == null) return true;       // 无位置时仍上报（fixed=0）
+        if (lastReportedLocation == null) return true; // 首次必须上报
+        float distance = lastLocation.distanceTo(lastReportedLocation);
+        // 静止（位移 < 30米）时仍然上报，只是跳过完全相同的坐标
+        return distance >= 1.0f || lastReportedLocation == null;
+    }
+
     private void sendLocationData() {
+        // 短暂唤醒 CPU 保证网络请求完成
+        acquireWakeLock();
+
         networkExecutor.execute(() -> {
             try {
                 String now = getCurrentTimestamp();
@@ -238,62 +278,80 @@ public class TrackingService extends Service {
                         + "&android="  + Build.VERSION.SDK_INT
                         + "&battery="  + battery;
 
-                String fullUrl = TARGET_URL + "?" + params;
-                Log.d(TAG, "Sending: " + fullUrl);
-
-                URL url = new URL(fullUrl);
+                URL url = new URL(TARGET_URL + "?" + params);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
                 conn.setRequestProperty("User-Agent", "GPSTracker/1.0 Android");
 
                 int responseCode = conn.getResponseCode();
-                StringBuilder response = new StringBuilder();
-                try (BufferedReader br = new BufferedReader(
-                        new InputStreamReader(responseCode >= 200 && responseCode < 300
-                                ? conn.getInputStream() : conn.getErrorStream()))) {
-                    String line;
-                    while ((line = br.readLine()) != null) response.append(line);
-                }
                 conn.disconnect();
 
-                lastSentString = now + " → HTTP " + responseCode;
-                Log.d(TAG, "Response " + responseCode + ": " + response);
+                if (responseCode == 200) {
+                    lastReportedLocation = lastLocation; // 记录本次上报位置
+                }
+
+                lastSentString = now + " → HTTP " + responseCode
+                        + " 🔋" + battery + "%";
+                Log.d(TAG, "Sent OK: " + responseCode);
 
                 updateNotification(gpsFixed
-                        ? String.format(Locale.US, "Tracking: %.5f, %.5f | 🔋%d%%", lat, lng, battery)
-                        : "Tracking active (waiting for GPS fix)");
+                    ? String.format(Locale.US, "%.5f, %.5f | 🔋%d%%", lat, lng, battery)
+                    : "等待 GPS 信号... | 🔋" + battery + "%");
 
             } catch (Exception e) {
-                Log.e(TAG, "Error sending location", e);
+                Log.e(TAG, "Send error", e);
                 lastSentString = "Error: " + e.getMessage();
-                updateNotification("Network error: " + e.getMessage());
+            } finally {
+                releaseWakeLock();
             }
         });
     }
 
-    private void sendPost(String params, String timestamp) {
+    // 判断新位置是否优于旧位置
+    private boolean isBetterLocation(Location newLoc, Location currentLoc) {
+        if (currentLoc == null) return true;
+        long timeDelta = newLoc.getTime() - currentLoc.getTime();
+        if (timeDelta > 60000) return true;   // 超过1分钟的新位置优先
+        if (timeDelta < -60000) return false;
+        float accuracyDelta = newLoc.getAccuracy() - currentLoc.getAccuracy();
+        boolean isMoreAccurate = accuracyDelta < 0;
+        boolean isSameProvider = newLoc.getProvider() != null
+                && newLoc.getProvider().equals(currentLoc.getProvider());
+        if (isMoreAccurate) return true;
+        if (accuracyDelta <= 50 && isSameProvider) return true;
+        return false;
+    }
+
+    private int getBatteryLevel() {
         try {
-            URL url = new URL(TARGET_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            conn.setRequestProperty("User-Agent", "GPSTracker/1.0 Android");
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(params.getBytes("UTF-8"));
+            Intent batteryIntent = registerReceiver(null,
+                new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (batteryIntent != null) {
+                int level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                if (level >= 0 && scale > 0) return (int)((level / (float) scale) * 100);
             }
+        } catch (Exception e) { Log.e(TAG, "Battery error", e); }
+        return -1;
+    }
 
-            int responseCode = conn.getResponseCode();
-            lastSentString = timestamp + " → POST HTTP " + responseCode;
-            conn.disconnect();
-        } catch (Exception e) {
-            Log.e(TAG, "POST error", e);
-        }
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "GPSTracker:send");
+                wakeLock.setReferenceCounted(false);
+            }
+            if (!wakeLock.isHeld()) wakeLock.acquire(15000L); // 最多持锁15秒
+        } catch (Exception e) { Log.e(TAG, "WakeLock error", e); }
+    }
+
+    private void releaseWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception e) { Log.e(TAG, "WakeLock release error", e); }
     }
 
     private String getCurrentTimestamp() {
@@ -302,68 +360,36 @@ public class TrackingService extends Service {
         return sdf.format(new Date());
     }
 
-    private int getBatteryLevel() {
-        try {
-            android.content.Intent batteryIntent = registerReceiver(null,
-                new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
-            if (batteryIntent != null) {
-                int level = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
-                int scale = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
-                if (level >= 0 && scale > 0) {
-                    return (int)((level / (float) scale) * 100);
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Battery read error", e);
-        }
-        return -1;
-    }
-    
     private String urlEncode(String value) {
-        try {
-            return java.net.URLEncoder.encode(value, "UTF-8");
-        } catch (Exception e) {
-            return value;
-        }
+        try { return java.net.URLEncoder.encode(value, "UTF-8"); }
+        catch (Exception e) { return value; }
     }
-
-    // ---- Notification ----
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "GPS Tracker",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("GPS tracking service notification");
+                CHANNEL_ID, "GPS Tracker", NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription("GPS tracking service");
             channel.setShowBadge(false);
+            channel.enableVibration(false);
+            channel.enableLights(false);
             NotificationManager nm = getSystemService(NotificationManager.class);
             if (nm != null) nm.createNotificationChannel(channel);
         }
     }
 
     private Notification buildNotification(String text) {
-        PendingIntent pi = PendingIntent.getActivity(
-            this, 0,
+        PendingIntent pi = PendingIntent.getActivity(this, 0,
             new Intent(this, MainActivity.class),
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
-        PendingIntent stopIntent = PendingIntent.getService(
-            this, 1,
-            new Intent(this, TrackingService.class).setAction("STOP"),
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("GPS Tracker — " + username)
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pi)
-            .addAction(android.R.drawable.ic_delete, "Stop", stopIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .build();
     }
 
