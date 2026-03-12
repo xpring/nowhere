@@ -21,17 +21,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate keystore (run once, then remove this step)
+      - name: Decode keystore
         run: |
-          keytool -genkeypair -v \
-            -keystore app/gps_tracker.keystore \
-            -alias gps_tracker \
-            -keyalg RSA -keysize 2048 -validity 36500 \
-            -storepass ctrlall \
-            -keypass 517429Xp \
-            -dname "CN=GPS Tracker,O=ctrlall,C=CN" \
-            -noprompt
-          base64 app/gps_tracker.keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/gps_tracker.keystore
 
       - name: Download gradle-wrapper.jar
         run: |
@@ -43,7 +35,6 @@ jobs:
         run: |
           cat > gradlew << 'EOF'
           #!/usr/bin/env sh
-          CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
           APP_HOME="`dirname \"$0\"`"
           APP_HOME="`( cd \"$APP_HOME\" && pwd )`"
           CLASSPATH="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
@@ -52,6 +43,11 @@ jobs:
           chmod +x gradlew
 
       - name: Build Debug APK
+        env:
+          KEYSTORE_PATH: gps_tracker.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleDebug
 
       - name: Upload APK
