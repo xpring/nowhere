@@ -1,3 +1,5 @@
+项目目的是安装在家人的安卓手机上，实现在网页上实时显示定位，当发生紧急情况时可一键拨号。代码完全由claude.ai完成。
+
 # GPS Tracker — Android App
 
 An Android application that tracks GPS location and reports it to `http://gps.ctrlall.com/save.php` at configurable intervals. The app starts automatically on device boot and runs as a foreground service.
